@@ -1,0 +1,71 @@
+name: Fetch Ocean Data Daily
+
+on:
+  schedule:
+    # 每天 UTC 03:00 执行（北京时间 11:00）
+    - cron: '0 3 * * *'
+  # 允许手动触发
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch-and-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          pip install --quiet requests
+          # Copernicus Marine Toolbox (可选，有账号时启用)
+          if [ -n "${{ secrets.CMEMS_USERNAME }}" ]; then
+            pip install --quiet copernicusmarine
+          fi
+
+      - name: Fetch ocean data
+        env:
+          CMEMS_USERNAME: ${{ secrets.CMEMS_USERNAME }}
+          CMEMS_PASSWORD: ${{ secrets.CMEMS_PASSWORD }}
+        run: |
+          ARGS=""
+          if [ -n "$CMEMS_USERNAME" ] && [ -n "$CMEMS_PASSWORD" ]; then
+            ARGS="--username $CMEMS_USERNAME --password $CMEMS_PASSWORD"
+            echo "✅ Copernicus 认证已配置"
+          else
+            echo "⚠️ 未配置 Copernicus 认证，仅使用 NOAA 数据"
+          fi
+          python fetch_data.py $ARGS
+
+      - name: Commit and push data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/ocean_data.json
+          git diff --staged --quiet && echo "No data changes" && exit 0
+          git commit -m "chore: update ocean data $(date -u +%Y-%m-%d)"
+          git push
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs
+          publish_branch: gh-pages
+          force_orphan: true
