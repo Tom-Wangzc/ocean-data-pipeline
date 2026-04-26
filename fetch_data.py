@@ -36,10 +36,13 @@ DEFAULT_LON_MAX = 121.0
 SST_URL = "https://coastwatch.noaa.gov/erddap/griddap/noaacwLEOACSPOSSTL3SnrtCDaily.json"
 
 # Copernicus Marine 数据集 ID (2024年4月后新Data Store格式)
-# BGC: 生物地球化学 — 包含叶绿素(chl)和溶解氧(o2)
-COPERNICUS_BGC_DATASET = "cmems_mod_glo_bgc-bio_anfc_0.25deg_P1D-m"
-# PHY: 物理 — 包含盐度(so) (注意: so 是独立的子数据集)
-COPERNICUS_PHY_SALINITY_DATASET = "cmems_mod_glo_phy-so_anfc_0.083deg_P1M-m"
+# 注意: 叶绿素和溶解氧在不同的子数据集里!
+# BGC-PFT: 浮游植物 — 包含叶绿素(chl)
+COPERNICUS_BGC_CHL_DATASET = "cmems_mod_glo_bgc-pft_anfc_0.25deg_P1D-m"
+# BGC-BIO: 初级生产+溶解氧 — 包含溶解氧(o2)
+COPERNICUS_BGC_O2_DATASET = "cmems_mod_glo_bgc-bio_anfc_0.25deg_P1D-m"
+# PHY: 物理 — 盐度(so) 日平均
+COPERNICUS_PHY_SALINITY_DATASET = "cmems_mod_glo_phy-so_anfc_0.083deg_P1D-m"
 
 # ============================================================
 #  NOAA SST 获取 (无需认证)
@@ -89,7 +92,7 @@ def fetch_noaa_sst(lat_min, lat_max, lon_min, lon_max, days_offset=3):
 # ============================================================
 
 def fetch_copernicus_subset(dataset_id, variables, lat_min, lat_max, lon_min, lon_max,
-                            depth_min=0, depth_max=1, days_offset=3, username=None, password=None):
+                            depth_min=0.5, depth_max=1, days_offset=3, username=None, password=None):
     """
     从 Copernicus Marine Data Store 获取子集数据
     使用 copernicusmarine Python 包
@@ -278,21 +281,37 @@ def main():
         args.lat_min, args.lat_max, args.lon_min, args.lon_max, args.days_offset
     )
 
-    # ---- 第2步: Copernicus BGC (叶绿素 + 溶解氧) ----
-    bgc_result = None
+    # ---- 第2步: Copernicus BGC-PFT (叶绿素) ----
+    chl_result = None
     if args.username and args.password:
-        print("\n[Copernicus BGC] 获取叶绿素 + 溶解氧...")
-        bgc_result = fetch_copernicus_subset(
-            COPERNICUS_BGC_DATASET,
-            variables=["chl", "o2"],
+        print("\n[Copernicus BGC-PFT] 获取叶绿素...")
+        chl_result = fetch_copernicus_subset(
+            COPERNICUS_BGC_CHL_DATASET,
+            variables=["chl"],
             lat_min=args.lat_min, lat_max=args.lat_max,
             lon_min=args.lon_min, lon_max=args.lon_max,
-            depth_min=0, depth_max=1,
+            depth_min=0.5, depth_max=1,
             days_offset=args.days_offset,
             username=args.username, password=args.password
         )
     else:
-        print("\n[Copernicus BGC] ⚠️ 未提供认证信息，跳过")
+        print("\n[Copernicus BGC-PFT] ⚠️ 未提供认证信息，跳过叶绿素")
+
+    # ---- 第2.5步: Copernicus BGC-BIO (溶解氧) ----
+    o2_result = None
+    if args.username and args.password:
+        print("\n[Copernicus BGC-BIO] 获取溶解氧...")
+        o2_result = fetch_copernicus_subset(
+            COPERNICUS_BGC_O2_DATASET,
+            variables=["o2"],
+            lat_min=args.lat_min, lat_max=args.lat_max,
+            lon_min=args.lon_min, lon_max=args.lon_max,
+            depth_min=0.5, depth_max=1,
+            days_offset=args.days_offset,
+            username=args.username, password=args.password
+        )
+    else:
+        print("\n[Copernicus BGC-BIO] ⚠️ 未提供认证信息，跳过溶解氧")
 
     # ---- 第3步: Copernicus PHY (盐度) ----
     phy_result = None
@@ -303,7 +322,7 @@ def main():
             variables=["so"],
             lat_min=args.lat_min, lat_max=args.lat_max,
             lon_min=args.lon_min, lon_max=args.lon_max,
-            depth_min=0, depth_max=1,
+            depth_min=0.5, depth_max=1,
             days_offset=args.days_offset,
             username=args.username, password=args.password
         )
@@ -326,8 +345,8 @@ def main():
         sst_source = "科学基准值"
 
     # 叶绿素
-    if bgc_result and "chl" in bgc_result:
-        chl_value = round(bgc_result["chl"]["mean"], 2)
+    if chl_result and "chl" in chl_result:
+        chl_value = round(chl_result["chl"]["mean"], 2)
         chl_is_real = True
         chl_source = "Copernicus Marine"
     else:
@@ -335,9 +354,9 @@ def main():
         chl_is_real = False
         chl_source = "统计模拟"
 
-    # 溶解氧
-    if bgc_result and "o2" in bgc_result:
-        do_value = round(bgc_result["o2"]["mean"], 1)
+    # 溶解氧 (Copernicus 返回 mmol/m³, 需转换为 μmol/kg: 1 mmol/m³ ≈ 1 μmol/kg * 密度/1000 ≈ 1.023 μmol/kg)
+    if o2_result and "o2" in o2_result:
+        do_value = round(o2_result["o2"]["mean"] * 1.023, 1)  # mmol/m³ → μmol/kg 近似转换
         do_is_real = True
         do_source = "Copernicus Marine"
     else:
