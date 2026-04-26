@@ -35,9 +35,11 @@ DEFAULT_LON_MAX = 121.0
 # NOAA ERDDAP - SST
 SST_URL = "https://coastwatch.noaa.gov/erddap/griddap/noaacwLEOACSPOSSTL3SnrtCDaily.json"
 
-# Copernicus Marine 数据集 ID
-COPERNICUS_BGC_DATASET = "cmems_mod_glo_bgc_anfc_merged-uv_P1D-m"  # 生物地球化学 (叶绿素+溶解氧)
-COPERNICUS_PHY_DATASET = "cmems_mod_glo_phy_anfc_0.083deg_P1D-m"   # 物理 (盐度+温度)
+# Copernicus Marine 数据集 ID (2024年4月后新Data Store格式)
+# BGC: 生物地球化学 — 包含叶绿素(chl)和溶解氧(o2)
+COPERNICUS_BGC_DATASET = "cmems_mod_glo_bgc-bio_anfc_0.25deg_P1D-m"
+# PHY: 物理 — 包含盐度(so) (注意: so 是独立的子数据集)
+COPERNICUS_PHY_SALINITY_DATASET = "cmems_mod_glo_phy-so_anfc_0.083deg_P1M-m"
 
 # ============================================================
 #  NOAA SST 获取 (无需认证)
@@ -62,7 +64,6 @@ def fetch_noaa_sst(lat_min, lat_max, lon_min, lon_max, days_offset=3):
         data = resp.json()
 
         rows = data.get("table", {}).get("rows", [])
-        # SST 数据集: [time, lat, lon, sst] → columnIndex=3
         values = [row[3] for row in rows if row[3] is not None and -5 < row[3] < 45]
 
         if values:
@@ -95,6 +96,7 @@ def fetch_copernicus_subset(dataset_id, variables, lat_min, lat_max, lon_min, lo
     """
     try:
         import copernicusmarine
+        print(f"[Copernicus] copernicusmarine 版本: {copernicusmarine.__version__}")
     except ImportError:
         print("[Copernicus] ⚠️ copernicusmarine 未安装，尝试安装...")
         import subprocess
@@ -105,7 +107,7 @@ def fetch_copernicus_subset(dataset_id, variables, lat_min, lat_max, lon_min, lo
     next_date = (datetime.utcnow() - timedelta(days=days_offset - 1)).strftime("%Y-%m-%d")
 
     print(f"[Copernicus] 请求: {dataset_id}")
-    print(f"  变量: {variables}, 日期: {date_str}")
+    print(f"  变量: {variables}, 日期: {date_str} ~ {next_date}")
 
     try:
         kwargs = dict(
@@ -122,18 +124,18 @@ def fetch_copernicus_subset(dataset_id, variables, lat_min, lat_max, lon_min, lo
             file_format="csv",
         )
 
-        # 认证 (优先用参数，其次用环境变量)
+        # 认证 (优先用参数，其次用环境变量 COPERNICUSMARINE_SERVICE_USERNAME)
         if username and password:
             kwargs["username"] = username
             kwargs["password"] = password
 
         result = copernicusmarine.subset(**kwargs)
 
-        # 从 CSV 或 xarray Dataset 中提取均值
+        # 从返回结果中提取均值
         return _extract_copernicus_values(result, variables)
 
     except Exception as e:
-        print(f"[Copernicus] ❌ 获取失败 ({dataset_id}): {e}")
+        print(f"[Copernicus] ❌ 获取失败 ({dataset_id}): {type(e).__name__}: {e}")
         return None
 
 
@@ -142,9 +144,15 @@ def _extract_copernicus_values(result, variables):
     values = {}
 
     try:
-        # 如果返回的是 xarray Dataset
+        # copernicusmarine.subset() 返回 ResponseSubset 对象
+        # 可能的返回形式: xarray Dataset, 文件路径, DataFrame 等
+
         import xarray as xr
+        import pandas as pd
+
+        # 情况1: xarray Dataset (在线模式)
         if isinstance(result, xr.Dataset):
+            print(f"[Copernicus] 收到 xarray Dataset, 变量: {list(result.data_vars)}")
             for var in variables:
                 if var in result:
                     data = result[var].values.flatten()
@@ -157,13 +165,12 @@ def _extract_copernicus_values(result, variables):
                         }
             return values if values else None
 
-        # 如果返回的是文件路径 (CSV)
-        if isinstance(result, str) or hasattr(result, '__fspath__'):
-            import pandas as pd
-            df = pd.read_csv(str(result))
+        # 情况2: pandas DataFrame
+        if isinstance(result, pd.DataFrame):
+            print(f"[Copernicus] 收到 DataFrame, 列: {list(result.columns)}")
             for var in variables:
-                if var in df.columns:
-                    valid = df[var].dropna()
+                if var in result.columns:
+                    valid = result[var].dropna()
                     if len(valid) > 0:
                         values[var] = {
                             "mean": float(valid.mean()),
@@ -172,10 +179,51 @@ def _extract_copernicus_values(result, variables):
                         }
             return values if values else None
 
-    except Exception as e:
-        print(f"[Copernicus] 解析结果失败: {e}")
+        # 情况3: 文件路径 (CSV 下载模式)
+        if isinstance(result, str) or hasattr(result, '__fspath__'):
+            filepath = str(result)
+            print(f"[Copernicus] 收到文件: {filepath}")
+            # 判断文件类型
+            if filepath.endswith('.csv'):
+                df = pd.read_csv(filepath)
+                print(f"[Copernicus] CSV 列: {list(df.columns)}")
+                for var in variables:
+                    if var in df.columns:
+                        valid = df[var].dropna()
+                        if len(valid) > 0:
+                            values[var] = {
+                                "mean": float(valid.mean()),
+                                "count": int(len(valid)),
+                                "is_real": True
+                            }
+                return values if values else None
 
-    return None
+        # 情况4: ResponseSubset 对象 (copernicusmarine 新版本)
+        # 检查是否有 .dataset 或 .file_path 属性
+        if hasattr(result, 'dataset'):
+            print(f"[Copernicus] 收到 ResponseSubset.dataset")
+            return _extract_copernicus_values(result.dataset, variables)
+
+        if hasattr(result, 'file_path'):
+            print(f"[Copernicus] 收到 ResponseSubset.file_path: {result.file_path}")
+            return _extract_copernicus_values(result.file_path, variables)
+
+        # 情况5: 尝试遍历 / 其他类型
+        print(f"[Copernicus] 未知返回类型: {type(result)}, 尝试通用解析...")
+
+        # 如果 result 是可迭代对象
+        if hasattr(result, '__iter__') and not isinstance(result, (str, dict)):
+            for item in result:
+                sub_result = _extract_copernicus_values(item, variables)
+                if sub_result:
+                    return sub_result
+
+        print(f"[Copernicus] 无法解析返回结果类型: {type(result)}")
+        return None
+
+    except Exception as e:
+        print(f"[Copernicus] 解析结果失败: {type(e).__name__}: {e}")
+        return None
 
 
 # ============================================================
@@ -187,18 +235,15 @@ def estimate_dissolved_oxygen(temp_c):
     o2_sat = 288.5 - 6.13 * temp_c + 0.087 * temp_c ** 2
     return round(o2_sat * 0.97, 1)  # 97% 饱和度
 
-
 def simulate_chlorophyll():
     """南海叶绿素统计基准: 0.5~4.5 mg/m³"""
     import random
     return round(1.5 + random.uniform(0, 3), 2)
 
-
 def simulate_salinity():
     """南海表层盐度气候态: 33.5~34.6 PSU"""
     import random
     return round(34.0 + random.uniform(-0.5, 0.6), 1)
-
 
 def simulate_microplastic():
     """微塑料浓度: 500~20000 个/m³ (无免费实时数据源)"""
@@ -225,6 +270,7 @@ def main():
     print("🌊 CTP Ocean Data Fetcher")
     print(f"   区域: {args.lat_min}~{args.lat_max}°N, {args.lon_min}~{args.lon_max}°E")
     print(f"   时间: {(datetime.utcnow() - timedelta(days=args.days_offset)).strftime('%Y-%m-%d')}")
+    print(f"   Copernicus 认证: {'✅ 已配置' if args.username else '❌ 未配置'}")
     print("=" * 60)
 
     # ---- 第1步: NOAA SST (无需认证) ----
@@ -253,8 +299,8 @@ def main():
     if args.username and args.password:
         print("\n[Copernicus PHY] 获取盐度...")
         phy_result = fetch_copernicus_subset(
-            COPERNICUS_PHY_DATASET,
-            variables=["so"],  # so = salinity
+            COPERNICUS_PHY_SALINITY_DATASET,
+            variables=["so"],
             lat_min=args.lat_min, lat_max=args.lat_max,
             lon_min=args.lon_min, lon_max=args.lon_max,
             depth_min=0, depth_max=1,

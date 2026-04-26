@@ -33,25 +33,23 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install --quiet requests
-          # Copernicus Marine Toolbox (可选，有账号时启用)
-          if [ -n "${{ secrets.CMEMS_USERNAME }}" ]; then
-            pip install --quiet copernicusmarine
-          fi
+          pip install --quiet -r requirements.txt
 
       - name: Fetch ocean data
         env:
-          CMEMS_USERNAME: ${{ secrets.CMEMS_USERNAME }}
-          CMEMS_PASSWORD: ${{ secrets.CMEMS_PASSWORD }}
+          # copernicusmarine 库自动识别的环境变量名
+          COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.CMEMS_USERNAME }}
+          COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.CMEMS_PASSWORD }}
         run: |
           ARGS=""
-          if [ -n "$CMEMS_USERNAME" ] && [ -n "$CMEMS_PASSWORD" ]; then
-            ARGS="--username $CMEMS_USERNAME --password $CMEMS_PASSWORD"
+          if [ -n "${{ secrets.CMEMS_USERNAME }}" ] && [ -n "${{ secrets.CMEMS_PASSWORD }}" ]; then
+            # 使用 Python -c 安全传递密码，避免 shell 特殊字符问题
+            ARGS="--username \"${{ secrets.CMEMS_USERNAME }}\" --password \"${{ secrets.CMEMS_PASSWORD }}\""
             echo "✅ Copernicus 认证已配置"
           else
             echo "⚠️ 未配置 Copernicus 认证，仅使用 NOAA 数据"
           fi
-          python fetch_data.py $ARGS
+          eval "python fetch_data.py $ARGS"
 
       - name: Commit and push data
         run: |
