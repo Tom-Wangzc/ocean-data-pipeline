@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-26T05:28:28Z",
+  "generated_at": "2026-06-27T04:23:13Z",
   "region": {
     "name": "South China Sea",
     "lat_min": 18.0,
@@ -9,40 +9,40 @@
   },
   "data": {
     "sea_surface_temperature": {
-      "value": 28.29,
+      "value": 24.25,
       "unit": "°C",
       "source": "科学基准值",
       "is_real": false
     },
     "chlorophyll_a": {
-      "value": 3.15,
+      "value": 0.33,
       "unit": "mg/m³",
-      "source": "统计模拟",
-      "is_real": false
+      "source": "Copernicus Marine",
+      "is_real": true
     },
     "dissolved_oxygen": {
-      "value": 179.2,
+      "value": 207.3,
       "unit": "μmol/kg",
-      "source": "Weiss方程估算",
-      "is_real": false
+      "source": "Copernicus Marine",
+      "is_real": true
     },
     "salinity": {
-      "value": 34.4,
+      "value": 33.2,
       "unit": "PSU",
-      "source": "气候态常量",
-      "is_real": false
+      "source": "Copernicus Marine",
+      "is_real": true
     },
     "microplastic": {
-      "value": 2625,
+      "value": 3372,
       "unit": "particles/m³",
       "source": "区域统计模拟",
       "is_real": false
     }
   },
   "quality": {
-    "real_data_count": 0,
+    "real_data_count": 3,
     "total_params": 5,
-    "any_real_data": false,
-    "level": "basic"
+    "any_real_data": true,
+    "level": "good"
   }
 }
