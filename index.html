@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌊 CTP 海洋环境数据</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0c1445 0%, #1a3a5c 50%, #0d4f4f 100%);
+            color: #e0e8f0;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        .container { max-width: 800px; margin: 0 auto; }
+        h1 {
+            text-align: center;
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(90deg, #4fc3f7, #81d4fa, #00e5ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle {
+            text-align: center;
+            color: #78909c;
+            font-size: 0.9rem;
+            margin-bottom: 2rem;
+        }
+        .data-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .data-card {
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 1.2rem;
+            transition: transform 0.2s, background 0.2s;
+        }
+        .data-card:hover {
+            transform: translateY(-2px);
+            background: rgba(255,255,255,0.1);
+        }
+        .data-card .icon { font-size: 1.8rem; margin-bottom: 0.3rem; }
+        .data-card .label { color: #90a4ae; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; }
+        .data-card .value {
+            font-size: 1.6rem;
+            font-weight: 700;
+            margin: 0.2rem 0;
+        }
+        .data-card .unit { color: #78909c; font-size: 0.85rem; }
+        .data-card .source {
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 10px;
+            display: inline-block;
+            margin-top: 0.4rem;
+        }
+        .source-real { background: rgba(76,175,80,0.2); color: #81c784; }
+        .source-estimate { background: rgba(255,183,77,0.2); color: #ffb74d; }
+        .source-sim { background: rgba(144,164,174,0.2); color: #90a4ae; }
+        .meta {
+            text-align: center;
+            color: #607d8b;
+            font-size: 0.8rem;
+            padding: 1rem;
+            background: rgba(255,255,255,0.03);
+            border-radius: 8px;
+        }
+        .quality-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+        .quality-dot {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            background: #37474f;
+        }
+        .quality-dot.filled { background: #4caf50; }
+        .json-link {
+            display: block;
+            text-align: center;
+            margin-top: 1.5rem;
+            color: #4fc3f7;
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+        .json-link:hover { text-decoration: underline; }
+        .loading {
+            text-align: center;
+            padding: 4rem;
+            color: #78909c;
+            font-size: 1.2rem;
+        }
+        .error {
+            text-align: center;
+            padding: 2rem;
+            color: #ef5350;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌊 海洋环境实时数据</h1>
+        <p class="subtitle">Clean The Pollution — 游戏数据驱动源</p>
+        <div id="content"><div class="loading">⏳ 加载数据中...</div></div>
+        <a class="json-link" href="ocean_data.json">📄 查看原始 JSON 数据</a>
+    </div>
+
+    <script>
+        const PARAMS = [
+            { key: 'sea_surface_temperature', icon: '🌡️', name: '海表温度', color: '#ef5350' },
+            { key: 'chlorophyll_a',           icon: '🌿', name: '叶绿素-a',  color: '#66bb6a' },
+            { key: 'dissolved_oxygen',        icon: '💨', name: '溶解氧',    color: '#42a5f5' },
+            { key: 'salinity',                icon: '🧂', name: '盐度',      color: '#ab47bc' },
+            { key: 'microplastic',            icon: '🗑️', name: '微塑料',    color: '#ffa726' }
+        ];
+
+        function getSourceClass(isReal) {
+            if (isReal) return 'source-real';
+            return 'source-estimate';
+        }
+
+        function getSourceLabel(item) {
+            if (item.is_real) return '✅ ' + item.source;
+            if (item.source.includes('模拟')) return '📊 ' + item.source;
+            return '🔬 ' + item.source;
+        }
+
+        async function loadData() {
+            const container = document.getElementById('content');
+            try {
+                const resp = await fetch('ocean_data.json');
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const data = await resp.json();
+
+                let html = '<div class="data-grid">';
+                PARAMS.forEach(p => {
+                    const item = data.data[p.key];
+                    if (!item) return;
+                    html += `
+                        <div class="data-card">
+                            <div class="icon">${p.icon}</div>
+                            <div class="label">${p.name}</div>
+                            <div class="value" style="color:${p.color}">${item.value}</div>
+                            <div class="unit">${item.unit}</div>
+                            <span class="source ${getSourceClass(item.is_real)}">${getSourceLabel(item)}</span>
+                        </div>`;
+                });
+                html += '</div>';
+
+                // 质量指示
+                const q = data.quality || {};
+                const dots = Array.from({length: 5}, (_, i) =>
+                    `<div class="quality-dot ${i < (q.real_data_count || 0) ? 'filled' : ''}"></div>`
+                ).join('');
+
+                html += `
+                    <div class="meta">
+                        <div>🕐 更新时间: ${new Date(data.generated_at).toLocaleString('zh-CN')}</div>
+                        <div>📍 区域: ${data.region.name} (${data.region.lat_min}~${data.region.lat_max}°N, ${data.region.lon_min}~${data.region.lon_max}°E)</div>
+                        <div class="quality-bar">
+                            真实数据: ${dots}
+                            <span style="margin-left:0.5rem">${q.real_data_count || 0}/${q.total_params || 5}</span>
+                        </div>
+                    </div>`;
+
+                container.innerHTML = html;
+            } catch (e) {
+                container.innerHTML = `<div class="error">❌ 数据加载失败: ${e.message}</div>`;
+            }
+        }
+
+        loadData();
+    </script>
+</body>
+</html>
