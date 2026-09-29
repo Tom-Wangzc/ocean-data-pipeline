@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-28T03:14:28Z",
+  "generated_at": "2026-09-29T03:11:08Z",
   "region": {
     "name": "South China Sea",
     "lat_min": 18.0,
@@ -9,7 +9,7 @@
   },
   "data": {
     "sea_surface_temperature": {
-      "value": 28.84,
+      "value": 29.09,
       "unit": "°C",
       "source": "NOAA ERDDAP",
       "is_real": true
@@ -33,7 +33,7 @@
       "is_real": true
     },
     "microplastic": {
-      "value": 4503,
+      "value": 6391,
       "unit": "particles/m³",
       "source": "区域统计模拟",
       "is_real": false
