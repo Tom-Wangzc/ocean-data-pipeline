@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-03T03:06:48Z",
+  "generated_at": "2026-11-04T03:06:35Z",
   "region": {
     "name": "South China Sea",
     "lat_min": 18.0,
@@ -33,7 +33,7 @@
       "is_real": true
     },
     "microplastic": {
-      "value": 5656,
+      "value": 5678,
       "unit": "particles/m³",
       "source": "区域统计模拟",
       "is_real": false
