@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-05T03:06:56Z",
+  "generated_at": "2026-11-06T03:07:01Z",
   "region": {
     "name": "South China Sea",
     "lat_min": 18.0,
@@ -9,19 +9,19 @@
   },
   "data": {
     "sea_surface_temperature": {
-      "value": 27.97,
+      "value": 27.86,
       "unit": "°C",
       "source": "NOAA ERDDAP",
       "is_real": true
     },
     "chlorophyll_a": {
-      "value": 0.23,
+      "value": 0.24,
       "unit": "mg/m³",
       "source": "Copernicus Marine",
       "is_real": true
     },
     "dissolved_oxygen": {
-      "value": 209.0,
+      "value": 209.1,
       "unit": "μmol/kg",
       "source": "Copernicus Marine",
       "is_real": true
@@ -33,7 +33,7 @@
       "is_real": true
     },
     "microplastic": {
-      "value": 8476,
+      "value": 3047,
       "unit": "particles/m³",
       "source": "区域统计模拟",
       "is_real": false
